@@ -1,0 +1,3 @@
+[submodule "shadergen"]
+	path = shadergen
+	url = https://github.com/LochieR/shadergen
