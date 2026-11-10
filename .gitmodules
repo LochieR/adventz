@@ -1,3 +1,6 @@
 [submodule "shadergen"]
 	path = shadergen
 	url = https://github.com/LochieR/shadergen
+[submodule "src/adventvk/vk-bootstrap"]
+	path = src/adventvk/vk-bootstrap
+	url = https://github.com/charles-lunarg/vk-bootstrap

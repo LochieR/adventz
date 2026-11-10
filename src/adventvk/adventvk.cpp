@@ -1,6 +1,6 @@
 #include "adventvk.h"
 
-#include "VkBootstrap.h"
+#include "vk-bootstrap/src/VkBootstrap.h"
 
 #include "bridge_alloc.h"
 

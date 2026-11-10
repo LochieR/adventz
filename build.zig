@@ -16,7 +16,7 @@ pub fn build(b: *std.Build) void {
     adventvk.root_module.addCSourceFiles(.{
         .root = b.path("src/adventvk"),
         .files = &.{
-            "VkBootstrap.cpp",
+            "vk-bootstrap/src/VkBootstrap.cpp",
             "adventvk.cpp",
         },
         .language = .cpp,
