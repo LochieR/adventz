@@ -1,6 +1,8 @@
 const std = @import("std");
 const adventvk = @import("adventvk");
 
+const tools = @import("../tools.zig");
+
 const Buffer = @import("Buffer.zig");
 const CommandList = @import("CommandList.zig");
 
@@ -46,7 +48,8 @@ pub fn init(self: *Device, allocator: *std.mem.Allocator) !void {
 
     const command_pool_info = adventvk.VkCommandPoolCreateInfo{
         .sType = adventvk.VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
-        .queueFamilyIndex = self.vk_data.queueFamily
+        .queueFamilyIndex = self.vk_data.queueFamily,
+        .flags = adventvk.VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
     };
 
     var result = adventvk.vkCreateCommandPool(self.vk_data.device, &command_pool_info, self.vk_data.allocator, &self.command_pool);
@@ -160,6 +163,9 @@ pub fn submitCommandList(self: *Device, command_list: *const CommandList) !void 
             self.secondary_command_buffer_usage[i] = true;
             break;
         }
+    }
+    if (command_buffer == null) {
+        return error.OutOfCommandBuffers;
     }
 
     const inheritance_info = adventvk.VkCommandBufferInheritanceInfo{
@@ -278,7 +284,7 @@ fn executeCommand(command_buffer: adventvk.VkCommandBuffer, command: *const Comm
             );
         },
         .native => |native_info| blk: {
-            if (native_info.type_id == CommandList.typeId(Buffer.VulkanCopyBufferNativeCommand)) {
+            if (native_info.type_id == tools.typeId(Buffer.VulkanCopyBufferNativeCommand)) {
                 const buffer_copy_info = native_info.as(Buffer.VulkanCopyBufferNativeCommand);
 
                 if (buffer_copy_info == null)
@@ -321,7 +327,7 @@ pub fn executeComputeQueue(self: *Device) !void {
         .waitSemaphoreCount = 1,
         .pWaitSemaphores = &self.semaphores[self.semaphore_index],
         .signalSemaphoreCount = 1,
-        .pSignalSemaphores = &self.semaphores[(self.semaphore_index + self.semaphores.len - 1) % self.semaphores.len], // get previous semaphore,
+        .pSignalSemaphores = &self.semaphores[(self.semaphore_index + 1) % self.semaphores.len],
         .pWaitDstStageMask = wait_stages.ptr,
     };
 
@@ -334,11 +340,19 @@ pub fn executeComputeQueue(self: *Device) !void {
 }
 
 pub fn waitForComputeQueue(self: *Device) !void {
-    var result = adventvk.vkWaitForFences(self.vk_data.device, 1, &self.fences[(self.semaphore_index + self.semaphores.len - 1) % self.semaphores.len], adventvk.VK_TRUE, std.math.maxInt(u64));
+    const fence = self.fences[(self.semaphore_index + self.semaphores.len - 1) % self.semaphores.len];
+
+    var result = adventvk.vkWaitForFences(self.vk_data.device, 1, &fence, adventvk.VK_TRUE, std.math.maxInt(u64));
     try VkResult.check(result);
 
-    result = adventvk.vkResetFences(self.vk_data.device, 1, &self.fences[(self.semaphore_index + self.semaphores.len - 1) % self.semaphores.len]);
+    result = adventvk.vkResetFences(self.vk_data.device, 1, &fence);
     try VkResult.check(result);
+
+    for (self.secondary_command_buffers, 0..) |command_buffer, i| {
+        if (std.mem.indexOfScalar(adventvk.VkCommandBuffer, self.submitted_command_buffers.items, command_buffer) == null) {
+            self.secondary_command_buffer_usage[i] = false;
+        }
+    }
 }
 
 pub fn beginSingleTimeCommands(self: *Device) CommandList {

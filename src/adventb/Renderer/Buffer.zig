@@ -100,7 +100,7 @@ pub fn deinit(self: *Buffer) void {
     adventvk.vkFreeMemory(self.device.vk_data.device, self.memory, self.device.vk_data.allocator);
 }
 
-pub fn map(self: *Buffer, size: usize) !?*anyopaque {
+pub fn map(self: *const Buffer, size: usize) !?*anyopaque {
     if (needStagingBuffer(self.buffer_type)) {
         var memory: ?*anyopaque = null;
         const result = adventvk.vkMapMemory(self.device.vk_data.device, self.staging_memory, 0, size, 0, &memory);
@@ -122,7 +122,7 @@ pub const VulkanCopyBufferNativeCommand = struct {
     dst_offset: usize,
 };
 
-pub fn unmap(self: *Buffer) !void {
+pub fn unmap(self: *const Buffer) !void {
     if (needStagingBuffer(self.buffer_type)) {
         adventvk.vkUnmapMemory(self.device.vk_data.device, self.staging_memory);
 

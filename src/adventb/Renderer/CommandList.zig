@@ -1,20 +1,12 @@
-//! Backend-agnostic command recording. Commands are stored in a list and
-//! translated to API calls (e.g. Vulkan) by the device at submit time.
-//!
-//! Only compute is supported for now: no render passes, graphics pipelines,
-//! draws or image commands.
-//!
-//! Recorded commands hold plain pointers to pipelines, buffers and shader
-//! resources. The caller must keep them alive until the command list has been
-//! executed.
-
 const std = @import("std");
+
+const tools = @import("../tools.zig");
 
 const Buffer = @import("Buffer.zig");
 const Device = @import("Device.zig");
 const ComputePipeline = @import("ComputePipeline.zig");
 const ShaderResource = @import("ShaderResource.zig");
-const shadergen = @import("shaders/shadergen.zig");
+const shadergen = @import("shadergen");
 
 const CommandList = @This();
 
@@ -51,19 +43,6 @@ pub const PipelineStage = packed struct(u32) {
     transfer: bool = false,
     _reserved1: u19 = 0,
 };
-
-/// Opaque identity for a native command's type. See `typeId`.
-pub const TypeId = *const anyopaque;
-
-/// Returns a unique id for `T`, used to tag native commands (the Zig
-/// equivalent of std::type_index).
-pub fn typeId(comptime T: type) TypeId {
-    const Marker = struct {
-        const Type = T;
-        var byte: u8 = 0;
-    };
-    return &Marker.byte;
-}
 
 pub const Command = union(enum) {
     bind_pipeline: BindPipeline,
@@ -127,11 +106,11 @@ pub const Command = union(enum) {
     /// A backend-specific command. `type_id` identifies the type that `ptr`
     /// points to. Use `as` to get it back as that type.
     pub const Native = struct {
-        type_id: TypeId,
+        type_id: tools.TypeId,
         ptr: *anyopaque,
 
         pub fn as(self: Native, comptime T: type) ?*T {
-            if (self.type_id != typeId(T)) return null;
+            if (self.type_id != tools.typeId(T)) return null;
             return @ptrCast(@alignCast(self.ptr));
         }
     };
@@ -242,7 +221,7 @@ pub fn memoryBarrier(self: *CommandList, from: ShaderStage, to: ShaderStage) !vo
 /// command list's execution.
 pub fn submitNativeCommand(self: *CommandList, comptime T: type, native_command: *T) !void {
     try self.record(.{ .native = .{
-        .type_id = typeId(T),
+        .type_id = tools.typeId(T),
         .ptr = native_command,
     } });
 }

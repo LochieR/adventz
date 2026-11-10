@@ -4,7 +4,7 @@ const adventvk = @import("adventvk");
 const Device = @import("Device.zig");
 
 const VkResult = @import("VkResult.zig");
-const shadergen = @import("shaders/shadergen.zig");
+const shadergen = @import("shadergen");
 
 const ShaderResourceLayout = @This();
 

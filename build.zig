@@ -36,6 +36,33 @@ pub fn build(b: *std.Build) void {
     const adventvk_mod = adventvk_h.createModule();
     adventvk_mod.linkLibrary(adventvk);
 
+    // Shared types used by generated shader files and by adventb. Being a
+    // single module means both sides see the *same* Zig types.
+    const shadergen_mod = b.createModule(.{
+        .root_source_file = b.path("shadergen/shadergen.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
+    const vaxis = b.dependency("vaxis", .{
+        .target = target,
+        .optimize = optimize
+    });
+
+    // adventb is pure Zig, so it's just a module: importing it compiles it into
+    // whatever uses it (linking a separate static lib as well would be redundant).
+    const adventb_mod = b.addModule("adventb", .{
+        .root_source_file = b.path("src/adventb/root.zig"),
+        .target = target,
+        .optimize = optimize,
+        .link_libc = true,
+        .imports = &.{
+            .{ .name = "adventvk", .module = adventvk_mod },
+            .{ .name = "shadergen", .module = shadergen_mod },
+        }
+    });
+    linkVulkan(b, adventb_mod);
+
     const exe = b.addExecutable(.{
         .name = "adventz",
         .root_module = b.createModule(.{
@@ -43,13 +70,13 @@ pub fn build(b: *std.Build) void {
             .target = target,
             .optimize = optimize,
             .imports = &.{
-                .{ .name = "adventvk", .module = adventvk_mod },
+                .{ .name = "adventb", .module = adventb_mod },
+                // Generated src/adventz/shaders/*.slang.zig do @import("shadergen").
+                .{ .name = "shadergen", .module = shadergen_mod },
+                .{ .name = "vaxis", .module = vaxis.module("vaxis") },
             },
         }),
     });
-    linkVulkan(b, exe.root_module);
-
-    exe.root_module.linkLibrary(adventvk);
 
     // `zig build shaders` compiles only the shaders; normal builds do it too.
     const shaders_step = b.step("shaders", "Compile Slang shaders");
@@ -65,6 +92,12 @@ pub fn build(b: *std.Build) void {
 
     run_cmd.step.dependOn(b.getInstallStep());
     run_cmd.addPassthruArgs();
+
+    // `zig build test` also semantically checks every declaration in adventb,
+    // since Zig otherwise only analyses code that's actually used.
+    const adventb_tests = b.addTest(.{ .root_module = adventb_mod });
+    const test_step = b.step("test", "Run tests");
+    test_step.dependOn(&b.addRunArtifact(adventb_tests).step);
 }
 
 /// Builds the shadergen submodule as a release-mode host tool (equivalent of
@@ -116,7 +149,6 @@ fn addShaders(b: *std.Build, step: *std.Build.Step, shadergen: *std.Build.Step.C
     // Copies into the source tree; only rewrites files whose contents changed.
     const update_src = b.addUpdateSourceFiles();
     step.dependOn(&update_src.step);
-    var copied_types_file = false;
     
     b.dependOnDirectoryContents(b.path("shaders"));
     var dir = b.root.openDir(io, "shaders", .{ .iterate = true }) catch |err|
@@ -137,21 +169,14 @@ fn addShaders(b: *std.Build, step: *std.Build.Step, shadergen: *std.Build.Step.C
         cmd.addArg("vulkan1.2");
         cmd.addArg("--output-lang");
         cmd.addArg("zig");
+        // Import the shared types as the "shadergen" module instead of having
+        // shadergen write a shadergen.zig copy next to each output.
+        cmd.addArg("--zig-types-import");
+        cmd.addArg("shadergen");
         cmd.addFileArg(b.path(b.fmt("shaders/{s}", .{entry.name})));
         cmd.addArg("-o");
         const generated = cmd.addOutputFileArg(out_name);
         update_src.addCopyFileToSource(generated, b.fmt("{s}/{s}", .{ shaders_out_dir, out_name }));
-
-        // shadergen also writes shadergen.zig (the shared types the generated
-        // file imports) next to its output. It's identical for every shader, so
-        // copy it from the first one.
-        if (!copied_types_file) {
-            update_src.addCopyFileToSource(
-                generated.dirname().path(b, "shadergen.zig"),
-                shaders_out_dir ++ "/shadergen.zig",
-            );
-            copied_types_file = true;
-        }
     }
 }
 

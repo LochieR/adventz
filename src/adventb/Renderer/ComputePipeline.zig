@@ -1,7 +1,7 @@
 const std = @import("std");
 const adventvk = @import("adventvk");
 
-const shadergen = @import("shaders/shadergen.zig");
+const shadergen = @import("shadergen");
 
 const Device = @import("Device.zig");
 const ShaderResourceLayout = @import("ShaderResourceLayout.zig");

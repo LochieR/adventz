@@ -7,5 +7,5 @@ void TestDay(uint3 coord : SV_DispatchThreadID, uniform RWStructuredBuffer<float
     if (coord.x >= 8)
         return;
 
-    output[coord.x] = float(coord.x);
+    output[coord.x] = float(coord.x) * sqrt(float(coord.x));
 }
